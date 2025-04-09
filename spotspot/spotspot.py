@@ -2,7 +2,7 @@ import queue
 import logging
 import threading
 from flask_socketio import SocketIO
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from services.config_service import ConfigService
 from services.spotfiy_service import SpotifyService
 from services.download_service import DownloadService

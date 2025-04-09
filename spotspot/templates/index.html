@@ -13,9 +13,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"
         integrity="sha512-luMnTJZ7oEchNDZAtQhgjomP1eZefnl82ruTH/3Oj/Yu5qYtwL7+dVRccACS/Snp1lFXq188XFipHKYE75IaQQ=="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <link rel="stylesheet" href="{{url_for('static', filename='style.css')}}">
-    <link rel="icon" type="image/x-icon" href="{{url_for('static', filename='logo.png')}}">
+    <link rel="stylesheet" href="{{ request.script_root }}/static/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{{ request.script_root }}/static/style.css">
+    <link rel="icon" type="image/x-icon" href="{{ request.script_root }}/static/logo.png">
 </head>
 
 <body class="d-flex flex-column min-vh-100">
@@ -23,7 +23,7 @@
         <!-- Title Bar -->
         <header class="mb-3 d-flex justify-content-between align-items-center">
             <div>
-                <a href="/status">
+                <a href="{{ request.script_root }}/status">
                     <i class="bi-clock-history fs-4"></i>
                 </a>
             </div>
@@ -158,8 +158,8 @@
         </div>
     </footer>
 
-    <script src="{{url_for('static', filename='js_general_script.js')}}"></script>
-    <script src="{{url_for('static', filename='js_theme_switcher.js')}}"></script>
+    <script src="{{ request.script_root }}/static/js_general_script.js"></script>
+    <script src="{{ request.script_root }}/static/js_theme_switcher.js"></script>
 </body>
 
 </html>
