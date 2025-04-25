@@ -19,7 +19,9 @@ class PlaylistManager:
             # Ensure playlist directory exists
             os.makedirs(self.config.m3u_playlist_path, exist_ok=True)
 
-            m3u_file_path = os.path.join(self.config.m3u_playlist_path, f"{self.config.m3u_playlist_name}.m3u")
+            playlist_name = metadata.get("playlist_name", "playlist").strip().replace("/", "-")
+            m3u_file_path = os.path.join(self.music_folder, f"{playlist_name}.m3u")
+
             logging.info(f"M3U playlist file: {m3u_file_path}")
 
             # Get list of files with their modification times
