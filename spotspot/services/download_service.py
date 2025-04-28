@@ -60,7 +60,7 @@ class DownloadService:
                 # Build SpotDL command; include --m3u only for playlists
                 if download_info["type"] == "playlist":
                     # sanitize playlist name
-                    safe_name = download_info.get("name", "playlist").strip().replace("/", "-")
+                    safe_name = download_info.get("name", "playlist").strip().replace("/", "-") + ".m3u"
                     command = [
                         "spotdl",
                         "--output", download_path,
