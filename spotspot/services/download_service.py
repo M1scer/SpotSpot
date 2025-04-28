@@ -65,6 +65,8 @@ class DownloadService:
                         "spotdl",
                         "--output", ".",
                         "--m3u", playlist_name,
+                        "--log-level", "DEBUG",
+                        "--print-errors",
                         url
                     ]
                 else:
@@ -72,17 +74,21 @@ class DownloadService:
 
                 logging.info(f"SpotDL command: {command}")
                 proc = subprocess.Popen(
-                    command, cwd=download_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                    command, cwd=download_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
                 )
                 stdout, stderr = proc.communicate()
 
-                if proc.returncode != 0:
+                for line in proc.stdout:
+                    logging.info(line.rstrip())
+
+                # Warten, bis SpotDL fertig ist
+                returncode = proc.wait()
+                if returncode != 0:
+                    logging.error(f"SpotDL exit code {returncode}")
                     download_info["status"] = "Failed"
-                    logging.error(f"Error downloading: {stderr.strip()}")
                 else:
                     download_info["status"] = "Complete"
-                    logging.info("Finished Item")
-                self.download_history[url] = download_info
+                    self.download_history[url] = download_info
 
             except Exception as e:
                 logging.error(f"Process Downloads Error: {e}")
