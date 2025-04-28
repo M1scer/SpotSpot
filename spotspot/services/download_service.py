@@ -63,11 +63,12 @@ class DownloadService:
                     playlist_name = download_info.get("name", "playlist").strip().replace("/", "-") + ".m3u"
                     command = [
                         "spotdl",
+                        "--output", ".",
                         "--m3u", playlist_name,
                         url
                     ]
                 else:
-                    command = ["spotdl", url]
+                    command = ["spotdl", "--output", ".", url]
 
                 logging.info(f"SpotDL command: {command}")
                 proc = subprocess.Popen(
