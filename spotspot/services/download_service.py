@@ -60,11 +60,12 @@ class DownloadService:
                 # Build SpotDL command; include --m3u only for playlists
                 if download_info["type"] == "playlist":
                     # sanitize playlist name
-                    safe_name = download_info.get("name", "playlist").strip().replace("/", "-") + ".m3u"
+                    playlist_name = download_info.get("name", "playlist").strip().replace("/", "-") + ".m3u"
+                    playlist_path = os.path.join(self.config.m3u_playlist_path, playlist_name)
                     command = [
                         "spotdl",
                         "--output", download_path,
-                        "--m3u", safe_name,
+                        "--m3u", playlist_path,
                         url
                     ]
                 else:
@@ -83,29 +84,6 @@ class DownloadService:
                     download_info["status"] = "Complete"
                     logging.info("Finished Item")
                 self.download_history[url] = download_info
-
-                # Handle M3U file for playlists
-                if download_info["type"] == "playlist":
-                    m3u_name = f"{safe_name}.m3u8"
-                    src = os.path.join(download_path, m3u_name)
-                    dest_dir = self.config.m3u_playlist_path
-                    os.makedirs(dest_dir, exist_ok=True)
-                    if os.path.isfile(src):
-                        dest = os.path.join(dest_dir, m3u_name)
-                        shutil.move(src, dest)
-                        logging.info(f"M3U moved to: {dest}")
-                        # Convert relative entries to absolute
-                        with open(dest, 'r+', encoding='utf-8') as f:
-                            lines = f.readlines()
-                            f.seek(0)
-                            for entry in lines:
-                                rel = entry.strip()
-                                abs_path = os.path.abspath(os.path.join(download_path, rel))
-                                f.write(abs_path + "\n")
-                            f.truncate()
-                        logging.info("M3U entries converted to absolute paths")
-                    else:
-                        logging.warning(f"M3U file not found at: {src}")
 
             except Exception as e:
                 logging.error(f"Process Downloads Error: {e}")
