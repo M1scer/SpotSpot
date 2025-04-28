@@ -60,7 +60,12 @@ class DownloadService:
                 # Build SpotDL command; include --m3u only for playlists
                 if download_info["type"] == "playlist":
                     # sanitize playlist name
-                    playlist_name = download_info.get("name", "playlist").strip().replace("/", "-") + ".m3u"
+                    playlist_name = (
+                        download_info.get("name", "playlist")
+                        .strip()
+                        .replace("/", "-")
+                        + ".m3u"
+                    )
                     command = [
                         "spotdl",
                         "--output", ".",
@@ -72,28 +77,34 @@ class DownloadService:
                 else:
                     command = ["spotdl", "--output", ".", url]
 
-                logging.info(f"SpotDL command: {command}")
+                logging.info(f"SpotDL command: {command} (cwd={download_path})")
                 proc = subprocess.Popen(
-                    command, cwd=download_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                    command,
+                    cwd=download_path,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True
                 )
-                stdout, stderr = proc.communicate()
 
+                # Live-Streaming der SpotDL-Ausgabe
                 for line in proc.stdout:
                     logging.info(line.rstrip())
 
-                # Warten, bis SpotDL fertig ist
+                # Auf Abschluss warten
                 returncode = proc.wait()
                 if returncode != 0:
                     logging.error(f"SpotDL exit code {returncode}")
                     download_info["status"] = "Failed"
                 else:
                     download_info["status"] = "Complete"
-                    self.download_history[url] = download_info
+
+                self.download_history[url] = download_info
 
             except Exception as e:
                 logging.error(f"Process Downloads Error: {e}")
                 download_info["status"] = "Error"
                 self.download_history[url] = download_info
 
+            # Status-Update senden und Queue-Task abschließen
             self.socketio.emit("update_status", {"history": list(self.download_history.values())})
             self.download_queue.task_done()
