@@ -22,11 +22,16 @@ class DownloadService:
         item_name = data.get("name")
         item_artist = data.get("artist")
 
-        download_info = {"name": item_name, "type": item_type, "artist": item_artist, "url": spotify_url, "status": "Pending..."}
+        download_info = {
+            "name": item_name,
+            "type": item_type,
+            "artist": item_artist,
+            "url": spotify_url,
+            "status": "Pending..."
+        }
 
         self.download_queue.put((spotify_url, download_info))
         self.download_history[spotify_url] = download_info
-
         self.socketio.emit("update_status", {"history": list(self.download_history.values())})
 
     def process_downloads(self):
@@ -37,6 +42,7 @@ class DownloadService:
                 self.download_queue.task_done()
                 continue
 
+            # Wähle den Zielordner basierend auf dem Typ
             if download_info["type"] == "track":
                 download_path = self.config.track_output
             elif download_info["type"] == "playlist":
@@ -45,6 +51,8 @@ class DownloadService:
                 download_path = self.config.album_output
             elif download_info["type"] == "artist":
                 download_path = self.config.artist_output
+            else:
+                download_path = self.config.track_output  # Fallback
 
             download_info["status"] = "Downloading..."
             self.download_history[url] = download_info
@@ -53,13 +61,15 @@ class DownloadService:
             try:
                 logging.info(f"Downloading: {url}")
 
-                # Use SpotDL's built-in M3U generation for playlists only
+                # Nutze SpotDL's built-in M3U-Erstellung nur bei Playlists
                 if download_info["type"] == "playlist":
-                    playlist_name = download_info.get("name", "playlist").strip().replace("/", "-")
                     command = [
                         "spotdl",
                         "--output", download_path,
-                        "--m3u", playlist_name,
+                        # Template für M3U-Datei: Playlist-Name entspricht {list-name}
+                        "--m3u", "{list-name}",
+                        # Nutze Web-Output-Dir falls Web-Mode
+                        "--web-use-output-dir",
                         url
                     ]
                 else:
@@ -68,91 +78,27 @@ class DownloadService:
                         "--output", download_path,
                         url
                     ]
-                logging.info(f"SpotDL command: {command}")
 
+                logging.info(f"SpotDL command: {command}")
                 self.spodtdl_subprocess = subprocess.Popen(
                     command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
                 )
 
-                if self.config.extra_logging.lower() == "false":
-                    stdout, stderr = self.spodtdl_subprocess.communicate()
-                else:
-                    while True and self.config.extra_logging.lower() == "true":
-                        stdout_line = self.spodtdl_subprocess.stdout.readline()
-                        stderr_line = self.spodtdl_subprocess.stderr.readline()
-
-                        if stdout_line:
-                            logging.info(f"SpotDL Output: {stdout_line.strip()}")
-                            sys.stdout.flush()
-
-                        if stderr_line:
-                            logging.error(f"SpotDL Error Log: {stderr_line.strip()}")
-                            sys.stderr.flush()
-
-                        if stdout_line == "" and stderr_line == "" and self.spodtdl_subprocess.poll() is not None:
-                            logging.info(f"No more SpotDL Logs available")
-                            break
-
-                if download_info["status"] == "Cancelled":
-                    self.download_queue.task_done()
-                    continue
+                stdout, stderr = self.spodtdl_subprocess.communicate()
 
                 if self.spodtdl_subprocess.returncode == 0:
                     download_info["status"] = "Complete"
-                    logging.info(f"Finished Item")
+                    logging.info("Finished Item")
                 else:
                     download_info["status"] = "Failed"
-                    logging.error(f"Error downloading: {stderr}")
+                    logging.error(f"Error downloading: {stderr.strip()}")
 
                 self.download_history[url] = download_info
 
             except Exception as e:
-                logging.error(f"Process Downloads Error: {str(e)}")
+                logging.error(f"Process Downloads Error: {e}")
                 download_info["status"] = "Error"
                 self.download_history[url] = download_info
 
             self.socketio.emit("update_status", {"history": list(self.download_history.values())})
-
             self.download_queue.task_done()
-
-    def cancel_active_download(self):
-        try:
-            if not self.spodtdl_subprocess:
-                logging.info(f"No active download.")
-                return
-
-            logging.info(f"Cancelling active download.")
-            self.spodtdl_subprocess.terminate()
-
-            # Find the active download in history and update its status
-            for url, info in self.download_history.items():
-                if info["status"] == "Downloading...":
-                    info["status"] = "Cancelled"
-                    self.download_history[url] = info
-                    break
-
-            self.spodtdl_subprocess = None
-
-        except Exception as e:
-            logging.error(f"Cancel Active Error: {str(e)}")
-
-        finally:
-            self.socketio.emit("update_status", {"history": list(self.download_history.values())})
-
-    def cancel_pending_downloads(self):
-        try:
-            temp_queue = []
-            while not self.download_queue.empty():
-                url, download_info = self.download_queue.get()
-                download_info["status"] = "Cancelled"
-                self.download_history[url] = download_info
-                temp_queue.append((url, download_info))
-
-            for item in temp_queue:
-                self.download_queue.put(item)
-
-        except Exception as e:
-            logging.error(f"Cancel Pending Error: {str(e)}")
-
-        finally:
-            self.socketio.emit("update_status", {"history": list(self.download_history.values())})
