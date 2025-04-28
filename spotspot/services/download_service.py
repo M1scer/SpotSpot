@@ -101,11 +101,11 @@ class DownloadService:
 
             if self.download_queue.empty():
                 logging.info("Queue is empty")
-                self.playlist_manager.media_server_refresh_check()
-            if self.download_queue.empty():
-                logging.info("Queue is empty")
                 if download_info.get("type") == "playlist":
-                    logging.info("Playlist-Download erkannt — starte Medienserver-Refresh inkl. M3U-Generierung")
+                    playlist_name = download_info.get("name", "playlist")
+                    safe_name = playlist_name.strip().replace("/", "-")
+                    self.playlist_manager.config.m3u_playlist_name = safe_name
+                    logging.info(f"Playlist-Download erkannt – M3U wird '{safe_name}.m3u' heißen")
                     self.playlist_manager.media_server_refresh_check()
 
     def cancel_active_download(self):
