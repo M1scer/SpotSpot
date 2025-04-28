@@ -14,21 +14,20 @@ class DownloadService:
         self.socketio = socketio
         self.download_queue = download_queue
         self.download_history = download_history
-        self.spodtdl_subprocess = None
+        self.spotdl_subprocess = None
 
     def add_item_to_queue(self, data):
         logging.info(f"Download Requested: {data}")
-
         spotify_url = data.get("url")
         item_type = data.get("type")
         item_name = data.get("name")
         item_artist = data.get("artist")
 
         download_info = {
-            "name": item_name,
-            "type": item_type,
-            "artist": item_artist,
             "url": spotify_url,
+            "type": item_type,
+            "name": item_name,
+            "artist": item_artist,
             "status": "Pending..."
         }
 
@@ -44,16 +43,10 @@ class DownloadService:
                 self.download_queue.task_done()
                 continue
 
-            # Choose target folder based on type
-            if download_info["type"] == "track":
-                download_path = self.config.track_output
-            elif download_info["type"] == "album":
-                download_path = self.config.album_output
-            elif download_info["type"] == "artist":
-                download_path = self.config.artist_output
-            else:
-                # For playlist and unknown types, store tracks in normal track folder
-                download_path = self.config.track_output
+            # Determine download path for audio files using placeholders
+            try:
+                download_path = self.config.track_output.format_map(download_info)
+            except Exception:
                 download_path = self.config.track_output
 
             os.makedirs(download_path, exist_ok=True)
@@ -64,8 +57,10 @@ class DownloadService:
             try:
                 logging.info(f"Downloading: {url}")
 
-                # Use SpotDL's built-in M3U only for playlists
+                # Build SpotDL command; include --m3u only for playlists
                 if download_info["type"] == "playlist":
+                    # sanitize playlist name
+                    safe_name = download_info.get("name", "playlist").strip().replace("/", "-")
                     command = [
                         "spotdl",
                         "--output", download_path,
@@ -76,48 +71,41 @@ class DownloadService:
                     command = ["spotdl", "--output", download_path, url]
 
                 logging.info(f"SpotDL command: {command}")
-                self.spodtdl_subprocess = subprocess.Popen(
+                proc = subprocess.Popen(
                     command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
                 )
+                stdout, stderr = proc.communicate()
 
-                stdout, stderr = self.spodtdl_subprocess.communicate()
-
-                if self.spodtdl_subprocess.returncode != 0:
+                if proc.returncode != 0:
                     download_info["status"] = "Failed"
                     logging.error(f"Error downloading: {stderr.strip()}")
                 else:
                     download_info["status"] = "Complete"
                     logging.info("Finished Item")
-
                 self.download_history[url] = download_info
 
-                # Move and fix M3U for playlists
+                # Handle M3U file for playlists
                 if download_info["type"] == "playlist":
                     m3u_name = f"{safe_name}.m3u8"
-                    # possible locations for m3u
-                    candidates = [
-                        os.path.join(download_path, m3u_name),
-                        os.path.join(os.getcwd(), m3u_name)
-                    ]
-                    src = next((p for p in candidates if os.path.isfile(p)), None)
+                    src = os.path.join(download_path, m3u_name)
                     dest_dir = self.config.m3u_playlist_path
                     os.makedirs(dest_dir, exist_ok=True)
-                    if src:
+                    if os.path.isfile(src):
                         dest = os.path.join(dest_dir, m3u_name)
                         shutil.move(src, dest)
                         logging.info(f"M3U moved to: {dest}")
-                        # convert entries to absolute paths
-                        with open(dest, 'r+', encoding='utf-8') as m3u_file:
-                            lines = m3u_file.readlines()
-                            m3u_file.seek(0)
+                        # Convert relative entries to absolute
+                        with open(dest, 'r+', encoding='utf-8') as f:
+                            lines = f.readlines()
+                            f.seek(0)
                             for entry in lines:
                                 rel = entry.strip()
                                 abs_path = os.path.abspath(os.path.join(download_path, rel))
-                                m3u_file.write(abs_path + "\n")
-                            m3u_file.truncate()
+                                f.write(abs_path + "\n")
+                            f.truncate()
                         logging.info("M3U entries converted to absolute paths")
                     else:
-                        logging.warning(f"M3U file not found in candidates: {candidates}")
+                        logging.warning(f"M3U file not found at: {src}")
 
             except Exception as e:
                 logging.error(f"Process Downloads Error: {e}")
