@@ -69,7 +69,7 @@ class DownloadService:
                     command = [
                         "spotdl",
                         "--output", download_path,
-                        # Template für M3U-Datei: Playlist-Name entspricht {list-name}
+                        # Template für M3U-Datei: Playlist-Name
                         "--m3u", "{list-name}",
                         # Nutze Web-Output-Dir falls Web-Mode
                         "--web-use-output-dir",
@@ -98,9 +98,8 @@ class DownloadService:
 
                 self.download_history[url] = download_info
 
-                # Wenn Playlist, verschiebe die erzeugte M3U-Datei
+                # Wenn Playlist, verschiebe und bearbeite die erzeugte M3U-Datei
                 if download_info["type"] == "playlist":
-                    # Ursprungspfad der M3U8 in download_path
                     m3u_name = f"{playlist_name}.m3u8"
                     src = os.path.join(download_path, m3u_name)
                     dest_dir = self.config.m3u_playlist_path
@@ -109,21 +108,16 @@ class DownloadService:
                     try:
                         shutil.move(src, dest)
                         logging.info(f"M3U verschoben nach: {dest}")
-                        # Pfade in M3U auf absolute Pfade anpassen
+                        # Pfade in M3U in absolute Pfade umwandeln
                         with open(dest, 'r+', encoding='utf-8') as m3u_file:
                             lines = m3u_file.readlines()
                             m3u_file.seek(0)
                             for entry in lines:
                                 rel = entry.strip()
-                                # erstelle absoluten Pfad basierend auf download_path
                                 abs_path = os.path.abspath(os.path.join(download_path, rel))
-                                m3u_file.write(abs_path + '
-')
+                                m3u_file.write(abs_path + "\n")
                             m3u_file.truncate()
-                        logging.info(f"M3U Pfade in absolute Pfade umgewandelt")
-                    except FileNotFoundError:
-                        logging.warning(f"M3U-Datei nicht gefunden: {src}")
-                        logging.info(f"M3U verschoben nach: {dest}")
+                        logging.info("M3U Pfade in absolute Pfade umgewandelt")
                     except FileNotFoundError:
                         logging.warning(f"M3U-Datei nicht gefunden: {src}")
 
