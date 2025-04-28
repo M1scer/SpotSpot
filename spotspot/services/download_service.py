@@ -1,4 +1,6 @@
 import sys
+import os
+import shutil
 import logging
 import subprocess
 
@@ -63,6 +65,7 @@ class DownloadService:
 
                 # Nutze SpotDL's built-in M3U-Erstellung nur bei Playlists
                 if download_info["type"] == "playlist":
+                    playlist_name = download_info.get("name", "playlist").strip().replace("/", "-")
                     command = [
                         "spotdl",
                         "--output", download_path,
@@ -94,6 +97,35 @@ class DownloadService:
                     logging.error(f"Error downloading: {stderr.strip()}")
 
                 self.download_history[url] = download_info
+
+                # Wenn Playlist, verschiebe die erzeugte M3U-Datei
+                if download_info["type"] == "playlist":
+                    # Ursprungspfad der M3U8 in download_path
+                    m3u_name = f"{playlist_name}.m3u8"
+                    src = os.path.join(download_path, m3u_name)
+                    dest_dir = self.config.m3u_playlist_path
+                    os.makedirs(dest_dir, exist_ok=True)
+                    dest = os.path.join(dest_dir, m3u_name)
+                    try:
+                        shutil.move(src, dest)
+                        logging.info(f"M3U verschoben nach: {dest}")
+                        # Pfade in M3U auf absolute Pfade anpassen
+                        with open(dest, 'r+', encoding='utf-8') as m3u_file:
+                            lines = m3u_file.readlines()
+                            m3u_file.seek(0)
+                            for entry in lines:
+                                rel = entry.strip()
+                                # erstelle absoluten Pfad basierend auf download_path
+                                abs_path = os.path.abspath(os.path.join(download_path, rel))
+                                m3u_file.write(abs_path + '
+')
+                            m3u_file.truncate()
+                        logging.info(f"M3U Pfade in absolute Pfade umgewandelt")
+                    except FileNotFoundError:
+                        logging.warning(f"M3U-Datei nicht gefunden: {src}")
+                        logging.info(f"M3U verschoben nach: {dest}")
+                    except FileNotFoundError:
+                        logging.warning(f"M3U-Datei nicht gefunden: {src}")
 
             except Exception as e:
                 logging.error(f"Process Downloads Error: {e}")
