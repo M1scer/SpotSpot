@@ -53,10 +53,26 @@ class DownloadService:
             try:
                 logging.info(f"Downloading: {url}")
 
-                command = ["spotdl", "--output", f"{download_path}", url]
+                # Use SpotDL's built-in M3U generation for playlists only
+                if download_info["type"] == "playlist":
+                    playlist_name = download_info.get("name", "playlist").strip().replace("/", "-")
+                    command = [
+                        "spotdl",
+                        "--output", download_path,
+                        "--m3u", playlist_name,
+                        url
+                    ]
+                else:
+                    command = [
+                        "spotdl",
+                        "--output", download_path,
+                        url
+                    ]
                 logging.info(f"SpotDL command: {command}")
 
-                self.spodtdl_subprocess = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                self.spodtdl_subprocess = subprocess.Popen(
+                    command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                )
 
                 if self.config.extra_logging.lower() == "false":
                     stdout, stderr = self.spodtdl_subprocess.communicate()
@@ -98,15 +114,6 @@ class DownloadService:
             self.socketio.emit("update_status", {"history": list(self.download_history.values())})
 
             self.download_queue.task_done()
-
-            if self.download_queue.empty():
-                logging.info("Queue is empty")
-                if download_info.get("type") == "playlist":
-                    playlist_name = download_info.get("name", "playlist")
-                    safe_name = playlist_name.strip().replace("/", "-")
-                    self.playlist_manager.config.m3u_playlist_name = safe_name
-                    logging.info(f"Playlist-Download erkannt – M3U wird '{safe_name}.m3u' heißen")
-                    self.playlist_manager.media_server_refresh_check()
 
     def cancel_active_download(self):
         try:
