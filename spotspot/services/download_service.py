@@ -25,18 +25,56 @@ class DownloadService:
         }
         self.download_queue.put((spotify_url, download_info))
         self.download_history[spotify_url] = download_info
-        self.socketio.emit("update_status", {"history": list(self.download_history.values())})
+        self._emit_update()
 
     def _ensure_writable(self, path):
         try:
-            # Make directory writable for all
             os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
             logging.debug(f"Set writable permissions on {path}")
         except Exception as e:
             logging.warning(f"Could not chmod {path}: {e}")
 
+    def _emit_update(self):
+        self.socketio.emit("update_status", {"history": list(self.download_history.values())})
+
+    def _prepare_download_path(self, download_info):
+        try:
+            path = self.config.track_output.format_map(download_info)
+        except Exception:
+            path = self.config.track_output
+        os.makedirs(path, exist_ok=True)
+        self._ensure_writable(path)
+        parent = os.path.dirname(path) or path
+        self._ensure_writable(parent)
+        return path
+
+    def _build_spotdl_command(self, url, download_info):
+        if download_info.get("type") == "playlist":
+            playlist_name = (
+                download_info.get("name", "playlist").strip().replace("/", "-") + ".m3u"
+            )
+            return [
+                "spotdl", "--output", ".",
+                "--m3u", playlist_name,
+                "--log-level", self.config.log_level,
+                "--print-errors", url
+            ]
+        else:
+            return ["spotdl", "--output", ".", url]
+
+    def _execute_download(self, command, cwd):
+        proc = subprocess.Popen(
+            command,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        for line in proc.stdout:
+            logging.info(line.rstrip())
+        return proc.wait()
+
     def process_downloads(self):
-        # Pre-write SpotDL config
         try:
             self.config.get_spotdl_vars()
             self.config.create_config_file()
@@ -49,62 +87,26 @@ class DownloadService:
                 self.download_queue.task_done()
                 continue
 
-            # Determine download path
-            try:
-                download_path = self.config.track_output.format_map(download_info)
-            except Exception:
-                download_path = self.config.track_output
-
-            # Create and chmod path
-            os.makedirs(download_path, exist_ok=True)
-            self._ensure_writable(download_path)
-            # also ensure parent is writable
-            parent = os.path.dirname(download_path) or download_path
-            self._ensure_writable(parent)
+            download_path = self._prepare_download_path(download_info)
 
             download_info["status"] = "Downloading..."
             self.download_history[url] = download_info
-            self.socketio.emit("update_status", {"history": list(self.download_history.values())})
+            self._emit_update()
 
             try:
                 logging.info(f"Downloading: {url}")
-                # Build SpotDL command
-                if download_info.get("type") == "playlist":
-                    playlist_name = (
-                        download_info.get("name", "playlist").strip().replace("/", "-")
-                        + ".m3u"
-                    )
-                    command = [
-                        "spotdl", "--output", ".",
-                        "--m3u", playlist_name,
-                        "--log-level", self.config.log_level,
-                        "--print-errors", url
-                    ]
-                else:
-                    command = ["spotdl", "--output", ".", url]
-
+                command = self._build_spotdl_command(url, download_info)
                 logging.info(f"SpotDL command: {command} (cwd={download_path})")
-                proc = subprocess.Popen(
-                    command,
-                    cwd=download_path,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True
-                )
-                for line in proc.stdout:
-                    logging.info(line.rstrip())
-                returncode = proc.wait()
+                returncode = self._execute_download(command, cwd=download_path)
                 if returncode != 0:
                     logging.error(f"SpotDL exit code {returncode}")
                     download_info["status"] = "Failed"
                 else:
                     download_info["status"] = "Complete"
-                self.download_history[url] = download_info
-
             except Exception as e:
                 logging.error(f"Process Downloads Error: {e}")
                 download_info["status"] = "Error"
-                self.download_history[url] = download_info
 
-            self.socketio.emit("update_status", {"history": list(self.download_history.values())})
+            self.download_history[url] = download_info
+            self._emit_update()
             self.download_queue.task_done()
