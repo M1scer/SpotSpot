@@ -1,6 +1,5 @@
 import sys
 import os
-import shutil
 import logging
 import subprocess
 
@@ -14,7 +13,6 @@ class DownloadService:
         self.socketio = socketio
         self.download_queue = download_queue
         self.download_history = download_history
-        self.spotdl_subprocess = None
 
     def add_item_to_queue(self, data):
         logging.info(f"Download Requested: {data}")
@@ -39,11 +37,11 @@ class DownloadService:
         while True:
             url, download_info = self.download_queue.get()
 
-            if download_info["status"] == "Cancelled":
+            if download_info.get("status") == "Cancelled":
                 self.download_queue.task_done()
                 continue
 
-            # Determine download path for audio files using placeholders
+            # Determine download path using placeholders
             try:
                 download_path = self.config.track_output.format_map(download_info)
             except Exception:
@@ -58,8 +56,7 @@ class DownloadService:
                 logging.info(f"Downloading: {url}")
 
                 # Build SpotDL command; include --m3u only for playlists
-                if download_info["type"] == "playlist":
-                    # sanitize playlist name
+                if download_info.get("type") == "playlist":
                     playlist_name = (
                         download_info.get("name", "playlist")
                         .strip()
@@ -78,6 +75,8 @@ class DownloadService:
                     command = ["spotdl", "--output", ".", url]
 
                 logging.info(f"SpotDL command: {command} (cwd={download_path})")
+
+                # Start subprocess with live streaming
                 proc = subprocess.Popen(
                     command,
                     cwd=download_path,
@@ -86,11 +85,11 @@ class DownloadService:
                     text=True
                 )
 
-                # Live-Streaming der SpotDL-Ausgabe
+                # Stream output live
                 for line in proc.stdout:
                     logging.info(line.rstrip())
 
-                # Auf Abschluss warten
+                # Wait for completion
                 returncode = proc.wait()
                 if returncode != 0:
                     logging.error(f"SpotDL exit code {returncode}")
@@ -105,6 +104,5 @@ class DownloadService:
                 download_info["status"] = "Error"
                 self.download_history[url] = download_info
 
-            # Status-Update senden und Queue-Task abschließen
             self.socketio.emit("update_status", {"history": list(self.download_history.values())})
             self.download_queue.task_done()
