@@ -61,20 +61,17 @@ class DownloadService:
                 if download_info["type"] == "playlist":
                     # sanitize playlist name
                     playlist_name = download_info.get("name", "playlist").strip().replace("/", "-") + ".m3u"
-                    playlist_path = os.path.relpath(download_path, "/app")
-                    playlist_full_path = os.path.join("/", playlist_path, playlist_name)
                     command = [
                         "spotdl",
-                        "--output", download_path,
-                        "--m3u", playlist_full_path,
+                        "--m3u", playlist_name,
                         url
                     ]
                 else:
-                    command = ["spotdl", "--output", download_path, url]
+                    command = ["spotdl", url]
 
                 logging.info(f"SpotDL command: {command}")
                 proc = subprocess.Popen(
-                    command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                    command, cwd=download_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
                 )
                 stdout, stderr = proc.communicate()
 
