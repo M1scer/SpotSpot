@@ -62,7 +62,7 @@ class DownloadService:
                     # sanitize playlist name
                     playlist_name = download_info.get("name", "playlist").strip().replace("/", "-") + ".m3u"
                     playlist_path = os.path.relpath(download_path, "/app")
-                    playlist_full_path = os.path.join(playlist_path, playlist_name)
+                    playlist_full_path = os.path.join("/", playlist_path, playlist_name)
                     command = [
                         "spotdl",
                         "--output", download_path,
